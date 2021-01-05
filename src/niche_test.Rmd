@@ -247,16 +247,16 @@ for (m in 1:nrow(mthdf)){
   edf$month1[mc] <- mthdf[m, 1]
   edf$month2[mc] <- mthdf[m, 2]
   
-  occ.sp1 <- subset(df, month == mthdf[m, 1] | occurrence == 1)
-  occ.sp1 <- subset(occ.sp1, select = -c(month, occurrence))
+  occ.sp1 <- subset(df, mph == mthdf[m, 1] | occurrence == 1)
+  occ.sp1 <- subset(occ.sp1, select = -c(mph, occurrence))
 
-  occ.sp2 <- subset(df, month == mthdf[m, 2] | occurrence == 1)
-  occ.sp2 <- subset(occ.sp2, select = -c(month, occurrence))
+  occ.sp2 <- subset(df, mph == mthdf[m, 2] | occurrence == 1)
+  occ.sp2 <- subset(occ.sp2, select = -c(mph, occurrence))
 
-  clim1 <- subset(df, month == mthdf[m, 1] | occurrence == 0)
-  clim1 <- subset(clim1, select = -c(month, occurrence))
-  clim2 <- subset(df, month == mthdf[m, 2] | occurrence == 0)
-  clim2 <- subset(clim2, select = -c(month, occurrence))
+  clim1 <- subset(df, mph == mthdf[m, 1] | occurrence == 0)
+  clim1 <- subset(clim1, select = -c(mph, occurrence))
+  clim2 <- subset(df, mph == mthdf[m, 2] | occurrence == 0)
+  clim2 <- subset(clim2, select = -c(mph, occurrence))
   
   clim12 <- rbind(clim1, clim2)
 
