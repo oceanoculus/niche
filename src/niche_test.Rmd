@@ -183,7 +183,7 @@ stabR <- summary(edf$stability) #0.9461 to 1 = very stable
 so niche equvlancy ( niche overlap is more equivalent/similar than random) is not significant for any month pairing BUT niche divergence is... so what does this mean for SDM?
 
 
-# repeat but split each month into pos and neg so test march pos vs march neg
+## split each month into pos and neg so test march pos vs march neg
 
 
 ```{r}
@@ -221,7 +221,7 @@ iterations<-100
 ```
 
 Resolution of the gridding of the climate space
-```{r resolution pt2}
+```{r}
 R=25
 ```
 
@@ -333,6 +333,231 @@ for (m in 1:nrow(mthdf)){
 
 write.csv(edf, "./output/nichetestphaseres.csv", row.names = FALSE)
 ```
+
+
+## split each month into year e.g march 1999 vs march 2000, march 1999 vs march 2001
+
+
+```{r}
+library(ecospat)
+
+
+dd <- read.csv("./data/presbk_wint.csv", header = TRUE, stringsAsFactors = FALSE)
+
+dd$yr_mth <- paste0(dd$month, "_", dd$year)
+
+names(dd)[names(dd) == 'decimalLongitude'] <- 'x'
+names(dd)[names(dd) == 'decimalLatitude'] <- 'y'
+
+dd <- subset(dd, select = c(x, y, occurrence, chl_surface, o2_depth, salinity_depth, temp_depth, yr_mth, month, year))
+
+
+
+
+```
+
+
+#stuff that doesnt change
+```{r}
+#Selection of variables to include in the analyses  
+Xvar<-c(3:6) #clim vars are cols 3 - 6
+nvar<-length(Xvar)
+```
+
+Number of iteration for the tests of equivalency and similarity
+```{r }
+iterations<-100
+```
+
+Resolution of the gridding of the climate space
+```{r}
+R=25
+```
+
+
+```{r}
+mc <- 1 #counter to move rows...
+```
+
+
+#stuff that changes...
+
+```{r}
+
+mthlst <- 3:12 #list of months
+
+nlst <- list()
+
+
+ for (month in 1:length(mthlst)){
+  mth <- mthlst[month]
+  df <- subset(dd, month == mth)
+  unyrs <- unique(df$year)
+  mthdf <- t(combn(unyrs,2)) #year pairs to test
+  
+  edf <- mphs <- data.frame("month" = character(nrow(mthdf)), "year1" = character(nrow(mthdf)), "year2" = character(nrow(mthdf)), "overlap_d" = numeric(nrow(mthdf)), "overlap_i" = numeric(nrow(mthdf)), "sim_d" = numeric(nrow(mthdf)), "sim_d_sig" = numeric(nrow(mthdf)), "sim_i" = numeric(nrow(mthdf)), "sim_i_sig" = numeric(nrow(mthdf)), "equiv_d_1" = numeric(nrow(mthdf)), "equiv_d_sig_1" = numeric(nrow(mthdf)), "equiv_i_1" = numeric(nrow(mthdf)), "equiv_i_sig_1" = numeric(nrow(mthdf)), stringsAsFactors=FALSE) #create empty df
+  
+  for (m in 1:nrow(mthdf)){
+    edf$month[mc] <- mth
+    edf$year1[mc] <- mthdf[m, 1]
+    edf$year2[mc] <- mthdf[m, 2]
+    
+    occ.sp1 <- subset(df, year == mthdf[m, 1] | occurrence == 1)
+    occ.sp1 <- subset(occ.sp1, select = -c(month, year, occurrence))
+
+    occ.sp2 <- subset(df, year == mthdf[m, 2] | occurrence == 1)
+    occ.sp2 <- subset(occ.sp2, select = -c(month, year, occurrence))
+
+    clim1 <- subset(df, year == mthdf[m, 1] | occurrence == 0)
+    clim1 <- subset(clim1, select = -c(month, year, occurrence))
+    clim2 <- subset(df, year == mthdf[m, 2] | occurrence == 0)
+    clim2 <- subset(clim2, select = -c(month, year, occurrence))
+  
+    clim12 <- rbind(clim1, clim2)
+
+  
+    #row weighting
+    row.w.1.occ<-1-(nrow(occ.sp1)/nrow(rbind(occ.sp1,occ.sp2))) # prevalence of occ1
+    row.w.2.occ<-1-(nrow(occ.sp2)/nrow(rbind(occ.sp1,occ.sp2))) # prevalence of occ2
+    row.w.occ<-c(rep(0, nrow(clim1)),rep(0, nrow(clim2)),rep(row.w.1.occ, nrow(occ.sp1)),rep(row.w.2.occ, nrow(occ.sp2)))
+    
+    row.w.1.env<-1-(nrow(clim1)/nrow(clim12))  # prevalence of clim1
+    row.w.2.env<-1-(nrow(clim2)/nrow(clim12))  # prevalence of clim2
+    row.w.env<-c(rep(row.w.1.env, nrow(clim1)),rep(row.w.2.env, nrow(clim2)),rep(0, nrow(occ.sp1)),rep(0, nrow(occ.sp2)))
+    
+    fac<-as.factor(c(rep(1, nrow(clim1)),rep(2, nrow(clim2)),rep(1, nrow(occ.sp1)),rep(2, nrow(occ.sp2))))
+    
+     #Global dataset for the analysis and rows for each sub dataset
+    data.env.occ<-rbind(clim1,clim2,occ.sp1,occ.sp2)[Xvar]
+    row.clim1<-1:nrow(clim1)
+    row.clim2<-(nrow(clim1)+1):(nrow(clim1)+nrow(clim2))
+    row.clim12<-1:(nrow(clim1)+nrow(clim2))
+    row.sp1<-(nrow(clim1)+nrow(clim2)+1):(nrow(clim1)+nrow(clim2)+nrow(occ.sp1))
+    row.sp2<-(nrow(clim1)+nrow(clim2)+nrow(occ.sp1)+1):(nrow(clim1)+nrow(clim2)+nrow(occ.sp1)+nrow(occ.sp2))
+    
+    #PCA-ENV: Measures niche overlap along the two first axes of a PCA calibrated on all the pixels of the study areas
+    pca.cal <-dudi.pca(data.env.occ,row.w = row.w.env, center = T, scale = T, scannf = F, nf = 2)     
+    
+    #Predict the scores on the axes
+    scores.clim12<- pca.cal$li[row.clim12,]
+    scores.clim1<- pca.cal$li[row.clim1,]
+    scores.clim2<- pca.cal$li[row.clim2,]
+    scores.sp1<- pca.cal$li[row.sp1,]
+    scores.sp2<- pca.cal$li[row.sp2,]
+    
+    #Calculation of occurrence density
+    z1<- ecospat.grid.clim.dyn(scores.clim12,scores.clim1,th.sp= 0,scores.sp1,R)
+    z2<- ecospat.grid.clim.dyn(scores.clim12,scores.clim2,th.sp= 0,scores.sp2,R)
+    
+    #Overlap values D and I. D is Schoener’s overlap metric (Schoener 1970). I is a modified Hellinger metric(Warren et al. 2008)
+    overlap <- ecospat.niche.overlap (z1, z2, cor = T)
+    edf$overlap_d[mc] <- overlap$D
+    edf$overlap_i[mc] <- overlap$I
+    
+    #niche similarity
+    similarity <- ecospat.niche.similarity.test (z1, z2, rep = iterations, alternative = "greater", rand.type = 1, ncores= 1) #niches randomly shifted in both areas - change rand = 2 for niche randomly shifted only in invaded area
+    edf$sim_d[mc] <- similarity$obs$D
+    edf$sim_d_sig[mc] <- similarity$p.D
+    edf$sim_i[mc] <- similarity$obs$I
+    edf$sim_i_sig[mc] <- similarity$p.I
+    
+    #niche equiv
+    equivalaency <- ecospat.niche.equivalency.test (z1, z2, rep = iterations, alternative = "greater", ncores= 1) #test for niche conservatism (alternative = "greater", i.e. the niche overlap is more equivalent/similar than random)
+    edf$equiv_d_1[mc] <- equivalaency$obs$D
+    edf$equiv_d_sig_1[mc] <- equivalaency$p.D
+    edf$equiv_i_1[mc] <- equivalaency$obs$I
+    edf$equiv_i_sig_1[mc] <- equivalaency$p.I
+    
+    equivalaency2 <- ecospat.niche.equivalency.test (z1, z2, rep = iterations, alternative = "lower", ncores= 1) #niche divergence (alternative = "lower", i.e. the niche overlap is less equivalent/similar than random).
+    edf$equiv_d_2[mc] <- equivalaency2$obs$D
+    edf$equiv_d_sig_2[mc] <- equivalaency2$p.D
+    edf$equiv_i_2[mc] <- equivalaency2$obs$I
+    edf$equiv_i_sig_2[mc] <- equivalaency2$p.I
+    
+    #nice exp stab unfilling
+    test1 <- ecospat.niche.dyn.index (z1, z2, intersection=NA)
+    test1$dynamic.index.w[2]
+    edf$expansion[mc] <- test1$dynamic.index.w[1]
+    edf$stability[mc] <- test1$dynamic.index.w[2]
+    edf$unfilling[mc] <- test1$dynamic.index.w[3]
+  
+    mc <- mc+1  
+  }
+  nlst[[month]] <- edf
+  mc <- 1
+}
+
+
+library(dplyr)
+all <- bind_rows(nlst)
+
+write.csv(all, "./output/nichetestyearres.csv", row.names = FALSE)
+```
+
+
+```{r nsig values}
+#b/c august is throwing an error, you ran the months 3-7 and 9-12. join together
+a <- read.csv("./output/nichetestyearres.csv", header = TRUE, stringsAsFactors = FALSE)
+b <- read.csv("./output/nichetestyearres912.csv", header = TRUE, stringsAsFactors = FALSE)
+
+c <- rbind(a, b)
+rm(a, b)
+
+colnames(c)
+
+#pull out all with a sig value
+sig <- subset(c, sim_d_sig <= 0.05 | sim_i_sig <= 0.05 | equiv_d_sig_1 <= 0.05 | equiv_i_sig_1 <= 0.05 | equiv_d_sig_2 <= 0.05 | equiv_i_sig_2 <= 0.05)
+#778/1020 pairs have a sig value
+
+#really want to just see the ones that are not the same... equiv_i_sig_2
+
+lesssim <- subset(sig, equiv_i_sig_2 <= 0.05)
+#548 pairs/1020 (~54%)
+
+mth <- unique(lesssim$month)
+#every month modelled
+
+#make a count of how many occurrences by month
+my <- table(lesssim$month)
+my
+# 3  4  5  6  7  9 10 11 12 
+# 44 75 68 61 65 25 72 68 70 
+
+#how many month pairs per month originally
+x <- c %>% count(c$month, sort = TRUE)
+
+# 3  4  5  6  7   9   10  11  12 month 
+# 44 75 68 61 65  25  72  68  70 no sig
+# 55 91 91 91 240 136 120 105 91 total
+# 80 82 75 67 27  18  60  65  77% no sig
+
+
+#out of interest look at more the same equiv_i_sig_1
+samesig <- subset(sig, equiv_i_sig_1 <= 0.05)
+#just ten month-year pairs
+mth <- unique(samesig$month) #just in july and september
+
+
+# niche similarity sim_d_sig and sim_i_sig
+simsigd <- subset(sig, sim_d_sig <= 0.05)
+#214 month-year pairs
+mth <- unique(simsigd$month) #all except december
+
+simsigi <- subset(sig, sim_i_sig <= 0.05)
+#74 month-year pairs
+mth <- unique(simsigi$month) #all except december
+
+```
+
+
+
+
+
+
+
+
+
+
 
 
 #same code as above but with some extras
